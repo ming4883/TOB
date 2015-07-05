@@ -81,6 +81,7 @@ namespace TOB
 							Width = 100,
 						};
 						bt.Click += (s, e) => {
+							Streaming.Stop();
 							Streaming.Start (IP, FULLSCREEN);
 						};
 						gb.Controls.Add (bt);
@@ -104,8 +105,8 @@ namespace TOB
 						{
 							NumericUpDown  ud = new NumericUpDown() {
 								Dock = DockStyle.Left,
-								Maximum = 254,
-								Minimum = 2,
+								Maximum = 255,
+								Minimum = 0,
 								Value = IP4,
 								Width = 60,
 							};
@@ -129,7 +130,7 @@ namespace TOB
 							NumericUpDown  ud = new NumericUpDown() {
 								Dock = DockStyle.Left,
 								Maximum = 255,
-								Minimum = 1,
+								Minimum = 0,
 								Value = IP3,
 								Width = 60,
 							};
@@ -152,7 +153,7 @@ namespace TOB
 							NumericUpDown  ud = new NumericUpDown() {
 								Dock = DockStyle.Left,
 								Maximum = 255,
-								Minimum = 1,
+								Minimum = 0,
 								Value = IP2,
 								Width = 60,
 							};
@@ -175,7 +176,7 @@ namespace TOB
 							NumericUpDown  ud = new NumericUpDown() {
 								Dock = DockStyle.Left,
 								Maximum = 255,
-								Minimum = 1,
+								Minimum = 0,
 								Value = IP1,
 								Width = 60,
 							};
@@ -227,11 +228,10 @@ namespace TOB
 			const string CACHING_OPTION = "--network-caching=20";
 			const string MINIMIZED = "--qt-start-minimized";
 			const string FULLSCREEN = "--fullscreen";
-			
+			const string NO_SYSTEM_TRAY = "--no-qt-system-tray";
 			
 			static public void Init (string[] args)
 			{
-				
 				string ret = Package.Extract (Path.GetFullPath ("./vlc.zip"), Path.GetFullPath ("./vlc/"));
 				
 				if (!string.IsNullOrWhiteSpace (ret))
@@ -246,13 +246,16 @@ namespace TOB
 						"-vv",
 						"--no-video",
 						CACHING_OPTION,
-						MINIMIZED,
+						NO_SYSTEM_TRAY,
+						//MINIMIZED,
+						
 					});
 				StartVLC(string.Format ("http://{0}:8080/video", ip), 
 					new string[] {
 						"-vv",
 						"--no-audio",
 						CACHING_OPTION,
+						NO_SYSTEM_TRAY,
 						fullscreen ? FULLSCREEN : "",
 					});
 			}
@@ -317,6 +320,7 @@ namespace TOB
 		{
 			Streaming.Init (args);
 			UI.Init (args);
+			Streaming.Stop();
 		}
 	}	// class App
 
