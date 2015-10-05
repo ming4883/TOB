@@ -7,6 +7,8 @@ using System.Threading;
 using System.Diagnostics;
 using System.Windows.Forms;
 using System.Drawing;
+using System.Net;
+using System.Xml;
 
 namespace TOB
 {
@@ -30,6 +32,38 @@ namespace TOB
 			
 			static public bool FULLSCREEN = true;
 			
+			static GroupBox _gb;
+			static Form _frm;
+			
+			static public void SetStatus(string text)
+			{
+				var task = new MethodInvoker(()=>
+				{
+					if (string.IsNullOrWhiteSpace(text))
+						_gb.Text = "Broadcast";
+					else
+						_gb.Text = "Broadcast - " + text;
+				});
+				
+				if (_gb.InvokeRequired)
+					_gb.Invoke(task);
+				else
+					task();
+			}
+			
+			static public void Focus()
+			{
+				var task = new MethodInvoker(()=>
+				{
+					_frm.Activate();
+				});
+				
+				if (_frm.InvokeRequired)
+					_frm.Invoke(task);
+				else
+					task();
+			}
+			
 			static public void Init (string[] args)
 			{
 				var frm = new Form() {
@@ -51,18 +85,7 @@ namespace TOB
 						Text = "Broadcast",
 					};
 					frm.Controls.Add (gb);
-					#if false
-					{
-						Button bt = new Button() {
-							Dock = DockStyle.Left,
-							Text = "CONTROL",
-							Width = 100,
-						};
-						bt.Click += (s, e) => {
-						};
-						gb.Controls.Add (bt);
-					}
-					#endif
+					_gb = gb;
 					{
 						Button bt = new Button() {
 							Dock = DockStyle.Left,
@@ -71,6 +94,7 @@ namespace TOB
 						};
 						bt.Click += (s, e) => {
 							Streaming.Stop();
+							SetStatus("");
 						};
 						gb.Controls.Add (bt);
 					}
@@ -82,7 +106,11 @@ namespace TOB
 						};
 						bt.Click += (s, e) => {
 							Streaming.Stop();
-							Streaming.Start (IP, FULLSCREEN);
+							if (Streaming.Start (IP, FULLSCREEN))
+							{
+								Streaming.EnableAutoRestart();
+								SetStatus("Playing");
+							}
 						};
 						gb.Controls.Add (bt);
 					}
@@ -217,18 +245,34 @@ namespace TOB
 				}
 				
 				frm.ResumeLayout();
+				_frm = frm;
 				
 				Application.Run (frm);
+			}
+			
+			static public void Warn(string msg)
+			{
+				MessageBox.Show(msg);
 			}
 		}
 		
 		class Streaming
 		{
-		// https://wiki.videolan.org/VLC_command-line_help
-			const string CACHING_OPTION = "--network-caching=20";
+			// https://wiki.videolan.org/VLC_command-line_help
+			const string AUDIO_CACHING_OPTION = "--network-caching=1536";
+			const string VIDEO_CACHING_OPTION = "--network-caching=1536";
 			const string MINIMIZED = "--qt-start-minimized";
 			const string FULLSCREEN = "--fullscreen";
 			const string NO_SYSTEM_TRAY = "--no-qt-system-tray";
+			const int VIDEO_QUALITY = 85;
+			
+			static Process _VideoProc = null;
+			static Process _AudioProc = null;
+			static Object _Sync = new Object();
+			static string _LastIP = "";
+			static bool _LastFullscreen = false;
+			static bool _Playing = false;
+			static Thread _Thread = null;
 			
 			static public void Init (string[] args)
 			{
@@ -238,35 +282,155 @@ namespace TOB
 					Console.WriteLine ("Extraction skipped: {0}", ret);
 			}
 			
-			static public void Start(string ip, bool fullscreen)
+			static public bool Start(string ip, bool fullscreen)
 			{
-				Console.WriteLine("streaming ip: {0}", ip);
-				StartVLC(string.Format ("http://{0}:8080/audio.wav", ip), 
-					new string[] {
-						"-vv",
-						"--no-video",
-						CACHING_OPTION,
-						NO_SYSTEM_TRAY,
-						//MINIMIZED,
+				lock (_Sync)
+				{
+					Console.WriteLine("streaming ip: {0}", ip);
+					if (!SetQuality(ip, VIDEO_QUALITY))
+					{
+						UI.Warn(string.Format("Cannot connect to {0}", ip));
+						return false;
+					}
+					
+					StartAudioAndVideoProcess (ip, fullscreen);
+					
+					_LastIP = ip;
+					_LastFullscreen = fullscreen;
+					_Playing = true;
+					
+					return true;
+				}
+			}
+			
+			static void RestartIfNeeded()
+			{
+				int retry = 0;
+				const int MAX_RETRY = 3;
+				
+				for (int i = 0; i < MAX_RETRY; ++i)
+				{
+					try
+					{
+						string url = string.Format ("http://{0}:8080/settings/quality?set={1}", _LastIP, VIDEO_QUALITY);
+						var request = WebRequest.Create(url) as HttpWebRequest;
+						request.Timeout = 5000;
+						var response = request.GetResponse() as HttpWebResponse;
+						var code = response.StatusCode;
+						response.Close();
+						if (code == HttpStatusCode.OK)
+							break;
 						
-					});
-				StartVLC(string.Format ("http://{0}:8080/video", ip), 
-					new string[] {
-						"-vv",
-						"--no-audio",
-						CACHING_OPTION,
-						NO_SYSTEM_TRAY,
-						fullscreen ? FULLSCREEN : "",
-					});
+						retry++;
+					}
+					catch(Exception)
+					{
+						retry++;
+					}
+				}
+				
+				if (retry >= MAX_RETRY)
+				{
+					UI.Focus();
+					
+					// wait for 10 sec and then auto restart
+					for(int i = 10; i > 0; --i)
+					{
+						UI.SetStatus (string.Format("Interrupted, reconnect in {0}", i));
+						Thread.Sleep (1000);
+					}
+					
+					UI.SetStatus ("Reconnecting");
+					Kill (_AudioProc);
+					Kill (_VideoProc);
+					
+					StartAudioAndVideoProcess (_LastIP, _LastFullscreen);
+				}
+				else
+				{
+					UI.SetStatus ("Playing");
+				}
+			}
+			
+			static public void EnableAutoRestart()
+			{
+				Thread t = new Thread(new ThreadStart(()=>
+				{
+					bool playing;
+					lock(_Sync)
+					{
+						playing = _Playing;
+					}
+					
+					while (playing)
+					{
+						Thread.Sleep(5000);
+						
+						RestartIfNeeded();
+						
+						lock(_Sync)
+						{
+							playing = _Playing;
+						}
+					}
+				}));
+				
+				t.Start();
+				_Thread = t;
 			}
 			
 			static public void Stop()
 			{
-				int killed = KillAllProcess ("vlc");
-			
-				if (killed > 0)
+				lock (_Sync)
 				{
-					Console.WriteLine ("killed {0} deprecated vlc process", killed);
+					_Playing = false;
+				}
+				
+				lock (_Sync)
+				{
+					if (null != _Thread)
+					{
+						_Thread.Abort();
+						_Thread = null;
+						
+					}
+					int killed = 0;
+					
+					if (Kill (_AudioProc))
+						killed++;
+					_AudioProc = null;
+					
+					if (Kill (_VideoProc))
+						killed++;
+					_VideoProc = null;
+					
+					killed += KillAllProcess ("vlc");
+				
+					if (killed > 2)
+					{
+						Console.WriteLine ("killed {0} deprecated vlc process", killed);
+					}
+				}
+			}
+			
+			static bool SetQuality(string ip, int value)
+			{
+				try
+				{
+					string url = string.Format ("http://{0}:8080/settings/quality?set={1}", ip, value);
+					var request = WebRequest.Create(url) as HttpWebRequest;
+					request.Timeout = 2000;
+					
+					var response = request.GetResponse() as HttpWebResponse;
+					XmlDocument xmlDoc = new XmlDocument();
+					xmlDoc.Load(response.GetResponseStream());
+					string ret = xmlDoc.GetElementsByTagName("result")[0].InnerText.ToLower();
+					response.Close();
+					return ret == "ok";
+				}
+				catch(Exception )
+				{
+					return false;
 				}
 			}
 			
@@ -300,7 +464,44 @@ namespace TOB
 					return null;
 				}
 				
+				Thread.Sleep (1000);
+				
 				return p;
+			}
+			
+			static void StartAudioAndVideoProcess(string ip, bool fullscreen)
+			{
+				_AudioProc = StartVLC(string.Format ("http://{0}:8080/audio.wav", ip), 
+					new string[] {
+						"-vv",
+						//"--no-video",
+						AUDIO_CACHING_OPTION,
+						NO_SYSTEM_TRAY,
+						//MINIMIZED,
+					});
+				_AudioProc.PriorityClass = ProcessPriorityClass.High;
+				
+				_VideoProc = StartVLC(string.Format ("http://{0}:8080/video4flash", ip), 
+					new string[] {
+						"-vv",
+						//"--no-audio",
+						VIDEO_CACHING_OPTION,
+						NO_SYSTEM_TRAY,
+						fullscreen ? FULLSCREEN : "",
+					});
+				_VideoProc.PriorityClass = ProcessPriorityClass.High;
+			}
+			
+			static bool Kill(Process p)
+			{
+				if (null != p && !p.HasExited)
+				{
+					p.Kill();
+					p.WaitForExit (1000);
+					return true;
+				}
+				
+				return false;
 			}
 			
 			static int KillAllProcess (string imgName)
@@ -308,9 +509,8 @@ namespace TOB
 				int cnt = 0;
 				foreach (Process p in Process.GetProcessesByName(imgName))
 				{
-					p.Kill();
-					p.WaitForExit (1000);
-					++cnt;
+					if (Kill (p))
+						++cnt;
 				}
 				return cnt;
 			}
@@ -319,7 +519,9 @@ namespace TOB
 		static public void Main (string[] args)
 		{
 			Streaming.Init (args);
+			
 			UI.Init (args);
+			
 			Streaming.Stop();
 		}
 	}	// class App
