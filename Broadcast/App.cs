@@ -63,6 +63,7 @@ namespace TOB
 			static VLC _vlc = null;
 			static VLC.MediaPlayback _VideoProc = null;
 			static VLC.MediaPlayback _AudioProc = null;
+			static DateTime _LastSync;
 			
 			static public void Init (string[] args)
 			{
@@ -108,18 +109,20 @@ namespace TOB
 						return false;
 					}
 					
+					_LastSync = DateTime.Now;
+					
 					_Playing = true;
 					
 					return true;
 				}
 			}
 			
-			static void RestartIfNeeded()
+			static bool RestartIfNeeded()
 			{
 				int retry = 0;
 				const int MAX_RETRY = 3;
 				
-				Log.WriteLine("audio:{0} video:{1}", _AudioProc.State, _VideoProc.State);
+				//Log.WriteLine("audio:{0} video:{1}", _AudioProc.State, _VideoProc.State);
 				
 				for (int i = 0; i < MAX_RETRY; ++i)
 				{
@@ -143,21 +146,46 @@ namespace TOB
 					}
 					
 					UI.SetStatus ("Reconnecting");
-					bool fullscreen = _VideoProc.Fullscreen;
+					lock(_Sync)
+					{
+						bool fullscreen = _VideoProc.Fullscreen;
+						
+						_AudioProc.Stop();
+						_VideoProc.Stop();
+						
+						Thread.Sleep (1000);
+						
+						_AudioProc.Play();
+						_VideoProc.Play();
+						_AudioProc.SetVolume (100);
+						_VideoProc.Fullscreen = fullscreen;
+						_LastSync = DateTime.Now;
+					}
 					
-					_AudioProc.Stop();
-					_VideoProc.Stop();
-					
-					Thread.Sleep (1000);
-					
-					_AudioProc.Play();
-					_VideoProc.Play();
-					_AudioProc.SetVolume (100);
-					_VideoProc.Fullscreen = fullscreen;
+					return false;
 				}
 				else
 				{
 					UI.SetStatus ("Playing");
+					return true;
+				}
+			}
+			
+			static public void SyncAudio()
+			{
+				lock(_Sync)
+				{
+					if (!_AudioProc.Alive || !_VideoProc.Alive)
+						return;
+					
+					var time = DateTime.Now.Subtract (_LastSync);
+					if (time.Minutes >= 15)
+					{
+						_AudioProc.Stop();
+						_AudioProc.Play();
+						_LastSync = DateTime.Now;
+						Log.WriteLine("SyncAudio at {0}", _LastSync);
+					}
 				}
 			}
 			
@@ -176,6 +204,8 @@ namespace TOB
 						Thread.Sleep(5000);
 						
 						RestartIfNeeded();
+						
+						SyncAudio();
 						
 						lock(_Sync)
 						{
