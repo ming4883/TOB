@@ -1,3 +1,3 @@
 @echo off
 cls
-start .\csscript\csws App
+start .\csscript\csws32 App
