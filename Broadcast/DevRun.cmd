@@ -1,3 +1,3 @@
 @echo off
 cls
-.\csscript\cscs32 App
+.\csscript\cscs32 App dev

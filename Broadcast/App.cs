@@ -15,47 +15,13 @@ namespace TOB
 {
 	class App
 	{
-		static string VLC_PATH = Path.GetFullPath (@".\vlc\x86\vlc.exe");
-		
-		class Log
-		{
-			static public void WriteLine(object a)
-			{
-				if (Environment.UserInteractive)
-					Console.WriteLine(a);
-			}
-			
-			static public void WriteLine(string fmt, object a)
-			{
-				if (Environment.UserInteractive)
-					Console.WriteLine(fmt, a);
-			}
-			
-			static public void WriteLine(string fmt, object a, object b)
-			{
-				if (Environment.UserInteractive)
-					Console.WriteLine(fmt, a, b);
-			}
-			
-			static public void WriteLine(string fmt, object a, object b, object c)
-			{
-				if (Environment.UserInteractive)
-					Console.WriteLine(fmt, a, b, c);
-			}
-			
-			static public void WriteLine(string fmt, object a, object b, object c, object d)
-			{
-				if (Environment.UserInteractive)
-					Console.WriteLine(fmt, a, b, c, d);
-			}
-		}
+		public static bool DevMode = false;
 		
 		class Streaming
 		{
 			// https://wiki.videolan.org/VLC_command-line_help
 			const string AUDIO_CACHING_OPTION = "--network-caching=1536";
 			const string VIDEO_CACHING_OPTION = "--network-caching=1024";
-			const int VIDEO_QUALITY = 85;
 			
 			static Object _Sync = new Object();
 			static bool _Playing = false;
@@ -63,10 +29,15 @@ namespace TOB
 			static VLC _vlc = null;
 			static VLC.MediaPlayback _VideoProc = null;
 			static VLC.MediaPlayback _AudioProc = null;
+			static string _IP = null;
 			static DateTime _LastSync;
+			static int SYNC_INTERVAL = 15;
 			
 			static public void Init (string[] args)
 			{
+				if (DevMode)
+					SYNC_INTERVAL = 2;
+
 				string ret = Package.Extract (Path.GetFullPath ("./vlc.zip"), Path.GetFullPath ("./vlc/x86"));
 				
 				if (!string.IsNullOrWhiteSpace (ret))
@@ -85,56 +56,70 @@ namespace TOB
 			{
 				lock (_Sync)
 				{
-					Log.WriteLine("Streaming from {0}", ip);
-					
 					StartAudioAndVideoPlayback (ip, fullscreen);
 					
-					if (!SetQuality(ip, VIDEO_QUALITY))
-					{
-						UI.Warn(string.Format("Cannot connect to {0}", ip));
-						
-						if (null != _AudioProc)
-						{
-							_AudioProc.Stop();
-							_AudioProc.Dispose();
-							_AudioProc = null;
-						}
-						
-						if (null != _VideoProc)
-						{
-							_VideoProc.Stop();
-							_VideoProc.Dispose();
-							_VideoProc = null;
-						}
+					if (!IsRemoteAlive())
 						return false;
-					}
 					
+					_IP = ip;
 					_LastSync = DateTime.Now;
+					
+					Log.WriteLine("Streaming from {0} at {1}", ip, _LastSync);
 					
 					_Playing = true;
 					
-					return true;
+					_Thread = new Thread(new ThreadStart(()=>
+					{
+						bool playing;
+						lock(_Sync)
+						{
+							playing = _Playing;
+						}
+						
+						while (playing)
+						{
+							Thread.Sleep(5000);
+							
+							SetQuality(_IP, UI.QUALITY);
+							
+							RestartIfNeeded();
+							
+							SyncAudio();
+							
+							lock(_Sync)
+							{
+								playing = _Playing;
+							}
+						}
+					}));
+					
+					_Thread.Start();
 				}
+				return true;
 			}
 			
-			static bool RestartIfNeeded()
+			static bool IsRemoteAlive()
 			{
-				int retry = 0;
 				const int MAX_RETRY = 3;
 				
-				//Log.WriteLine("audio:{0} video:{1}", _AudioProc.State, _VideoProc.State);
-				
-				for (int i = 0; i < MAX_RETRY; ++i)
+				while (_AudioProc.Preparing || _VideoProc.Preparing)
 				{
-					if (!_AudioProc.Alive || !_VideoProc.Alive)
-						retry++;
-					else
-						break;
+					//Log.WriteLine("audio:{0} video:{1}", _AudioProc.State, _VideoProc.State);
 					
 					Thread.Sleep (1000);
 				}
 				
-				if (retry >= MAX_RETRY)
+				if (_AudioProc.Alive && _VideoProc.Alive)
+					return true;
+				
+				//Log.WriteLine("IsRemoteAlive() = false {0}, {1}", _AudioProc.State, _VideoProc.State);
+				
+				return false;
+			}
+			
+			static bool RestartIfNeeded()
+			{
+				if (!IsRemoteAlive())
 				{
 					UI.Focus();
 					
@@ -145,7 +130,7 @@ namespace TOB
 						Thread.Sleep (1000);
 					}
 					
-					UI.SetStatus ("Reconnecting");
+					UI.SetStatus ("Connecting");
 					lock(_Sync)
 					{
 						bool fullscreen = _VideoProc.Fullscreen;
@@ -159,6 +144,7 @@ namespace TOB
 						_VideoProc.Play();
 						_AudioProc.SetVolume (100);
 						_VideoProc.Fullscreen = fullscreen;
+						
 						_LastSync = DateTime.Now;
 					}
 					
@@ -179,43 +165,15 @@ namespace TOB
 						return;
 					
 					var time = DateTime.Now.Subtract (_LastSync);
-					if (time.Minutes >= 15)
+					if (time.Minutes >= SYNC_INTERVAL)
 					{
 						_AudioProc.Stop();
 						_AudioProc.Play();
+						
 						_LastSync = DateTime.Now;
 						Log.WriteLine("SyncAudio at {0}", _LastSync);
 					}
 				}
-			}
-			
-			static public void EnableAutoRestart()
-			{
-				Thread t = new Thread(new ThreadStart(()=>
-				{
-					bool playing;
-					lock(_Sync)
-					{
-						playing = _Playing;
-					}
-					
-					while (playing)
-					{
-						Thread.Sleep(5000);
-						
-						RestartIfNeeded();
-						
-						SyncAudio();
-						
-						lock(_Sync)
-						{
-							playing = _Playing;
-						}
-					}
-				}));
-				
-				t.Start();
-				_Thread = t;
 			}
 			
 			static public void Stop()
@@ -251,7 +209,7 @@ namespace TOB
 			
 			static bool SetQuality(string ip, int value)
 			{
-				const int MAX_RETRY = 3;
+				const int MAX_RETRY = 5;
 				
 				for (int i=0; i <MAX_RETRY; ++i)
 				{
@@ -259,7 +217,7 @@ namespace TOB
 					{
 						string url = string.Format ("http://{0}:8080/settings/quality?set={1}", ip, value);
 						var request = WebRequest.Create(url) as HttpWebRequest;
-						request.Timeout = 10000;
+						request.Timeout = 5000;
 						
 						var response = request.GetResponse() as HttpWebResponse;
 						XmlDocument xmlDoc = new XmlDocument();
@@ -272,10 +230,11 @@ namespace TOB
 					}
 					catch(Exception err)
 					{
-						Log.WriteLine("SetQuality pass {0} failed, {1}", i, err);
 						Thread.Sleep (500);
 					}
 				}
+				
+				Log.WriteLine("SetQuality failed all {0} passes", MAX_RETRY);
 				
 				return false;
 			}
@@ -317,6 +276,8 @@ namespace TOB
 				}
 			}
 			
+			static public int QUALITY = 25;
+			
 			static public bool FULLSCREEN = true;
 			
 			static GroupBox _gb;
@@ -356,14 +317,15 @@ namespace TOB
 			
 			static public void Init (string[] args)
 			{
+				FULLSCREEN = !DevMode;
+				
 				var frm = new Form() {
 					Text = "TobChurch Broadcast",
 					Size = new Size (480, 240),
-					Padding = new Padding (5),
+					Padding = new Padding (2),
 					Font = new Font ("Consolas", 12.0f),
-					FormBorderStyle = FormBorderStyle.FixedSingle,
+					FormBorderStyle = FormBorderStyle.FixedToolWindow,
 					MaximizeBox = false,
-					Icon = Icon.ExtractAssociatedIcon(VLC_PATH),
 				};
 				
 				frm.SuspendLayout();
@@ -373,6 +335,7 @@ namespace TOB
 						Dock = DockStyle.Top,
 						Height = 80,
 						Text = "Broadcast",
+						Padding = new Padding (8),
 					};
 					frm.Controls.Add (gb);
 					_gb = gb;
@@ -396,10 +359,13 @@ namespace TOB
 						};
 						bt.Click += (s, e) => {
 							Streaming.Stop();
-							if (Streaming.Start (IP, FULLSCREEN))
+							
+							UI.SetStatus ("Connecting");
+					
+							if (!Streaming.Start(IP, FULLSCREEN))
 							{
-								Streaming.EnableAutoRestart();
-								SetStatus("Playing");
+								Warn(string.Format("Cannot connect to {0}!", IP));
+								UI.SetStatus ("");
 							}
 						};
 						gb.Controls.Add (bt);
@@ -409,11 +375,45 @@ namespace TOB
 				{
 					GroupBox gb = new GroupBox() {
 						Dock = DockStyle.Top,
-						Height = 120,
+						Height = 130,
 						Text = "Options",
 					};
 					frm.Controls.Add (gb);
 					
+					#region QUALITY
+					{
+						Panel p = new Panel() {
+							Dock = DockStyle.Top,
+							Height = 35,
+						};
+						gb.Controls.Add (p);
+						{
+							NumericUpDown  ud = new NumericUpDown() {
+								Dock = DockStyle.Left,
+								Maximum = 100,
+								Minimum = 1,
+								Value = QUALITY,
+								Width = 60,
+							};
+							p.Controls.Add (ud);
+							ud.ValueChanged += (s, e) =>
+							{
+								QUALITY = (int)ud.Value;
+							};
+						}
+						{
+							Label la = new Label() {
+								Text = "Quality ",
+								Dock = DockStyle.Left,
+								TextAlign = ContentAlignment.MiddleLeft,
+								AutoSize = true,
+							};
+							p.Controls.Add (la);
+						}
+					}
+					#endregion
+					
+					#region IP
 					{
 						Panel p = new Panel() {
 							Dock = DockStyle.Top,
@@ -514,6 +514,7 @@ namespace TOB
 							p.Controls.Add (la);
 						}
 					}
+					#endregion
 					
 					{
 						CheckBox ck = new CheckBox() {
@@ -545,8 +546,49 @@ namespace TOB
 			}
 		}
 		
+		class Log
+		{
+			static public void WriteLine(object a)
+			{
+				if (DevMode)
+					Console.WriteLine(a);
+			}
+			
+			static public void WriteLine(string fmt, object a)
+			{
+				if (DevMode)
+					Console.WriteLine(fmt, a);
+			}
+			
+			static public void WriteLine(string fmt, object a, object b)
+			{
+				if (DevMode)
+					Console.WriteLine(fmt, a, b);
+			}
+			
+			static public void WriteLine(string fmt, object a, object b, object c)
+			{
+				if (DevMode)
+					Console.WriteLine(fmt, a, b, c);
+			}
+			
+			static public void WriteLine(string fmt, object a, object b, object c, object d)
+			{
+				if (DevMode)
+					Console.WriteLine(fmt, a, b, c, d);
+			}
+		}
+		
 		static public void Main (string[] args)
 		{
+			foreach (string a in args)
+			{
+				if (a.ToLower() == "dev")
+					DevMode = true;
+			}
+			
+			Log.WriteLine ("DevMode = {0}", DevMode);
+			
 			Streaming.Init (args);
 			
 			UI.Init (args);

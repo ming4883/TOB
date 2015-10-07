@@ -71,6 +71,16 @@ namespace TOB
 				}
 			}
 			
+			public bool Preparing
+			{
+				get
+				{
+					libvlc_state_t state = State;
+					return state == libvlc_state_t.libvlc_Opening 
+						|| state == libvlc_state_t.libvlc_Buffering;
+				}
+			}
+			
 			public void Play()
 			{
 				mVLC.libvlc_media_player_play (mPlayer);
