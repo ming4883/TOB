@@ -20,8 +20,11 @@ namespace TOB
 		class Streaming
 		{
 			// https://wiki.videolan.org/VLC_command-line_help
-			const string AUDIO_CACHING_OPTION = "--network-caching=1536";
-			const string VIDEO_CACHING_OPTION = "--network-caching=1024";
+			const string CACHING = "2048";
+			const string FILE_CACHING_OPTION = "--file-caching=" + CACHING;
+			const string LIVE_CACHING_OPTION = "--live-caching=" + CACHING;
+			const string DISK_CACHING_OPTION = "--disk-caching=" + CACHING;
+			const string NETWORK_CACHING_OPTION = "--network-caching=" + CACHING;
 			
 			static Object _Sync = new Object();
 			static bool _Playing = false;
@@ -31,13 +34,10 @@ namespace TOB
 			static VLC.MediaPlayback _AudioProc = null;
 			static string _IP = null;
 			static DateTime _LastSync;
-			static int SYNC_INTERVAL = 15;
+			static int SYNC_INTERVAL = 5;
 			
 			static public void Init (string[] args)
 			{
-				if (DevMode)
-					SYNC_INTERVAL = 2;
-
 				string ret = Package.Extract (Path.GetFullPath ("./vlc.zip"), Path.GetFullPath ("./vlc/x86"));
 				
 				if (!string.IsNullOrWhiteSpace (ret))
@@ -84,7 +84,7 @@ namespace TOB
 							
 							RestartIfNeeded();
 							
-							SyncAudio();
+							SyncAudio(false);
 							
 							lock(_Sync)
 							{
@@ -157,7 +157,7 @@ namespace TOB
 				}
 			}
 			
-			static public void SyncAudio()
+			static public void SyncAudio(bool forceSync)
 			{
 				lock(_Sync)
 				{
@@ -165,7 +165,7 @@ namespace TOB
 						return;
 					
 					var time = DateTime.Now.Subtract (_LastSync);
-					if (time.Minutes >= SYNC_INTERVAL)
+					if (time.Minutes >= SYNC_INTERVAL || forceSync)
 					{
 						_AudioProc.Stop();
 						_AudioProc.Play();
@@ -241,11 +241,15 @@ namespace TOB
 			
 			static void StartAudioAndVideoPlayback(string ip, bool fullscreen)
 			{
+				Log.WriteLine (NETWORK_CACHING_OPTION);
 				_AudioProc = _vlc.CreatePlayback(
 					string.Format ("http://{0}:8080/audio.wav", ip), 
 					new string[] {
 						//"--no-video",
-						AUDIO_CACHING_OPTION,
+						FILE_CACHING_OPTION,
+						LIVE_CACHING_OPTION,
+						DISK_CACHING_OPTION,
+						NETWORK_CACHING_OPTION,
 					});
 				_AudioProc.Play();
 				
@@ -253,7 +257,10 @@ namespace TOB
 					string.Format ("http://{0}:8080/video4flash", ip), 
 					new string[] {
 						//"--no-audio",
-						VIDEO_CACHING_OPTION,
+						FILE_CACHING_OPTION,
+						LIVE_CACHING_OPTION,
+						DISK_CACHING_OPTION,
+						NETWORK_CACHING_OPTION,
 					});
 				_VideoProc.Play();
 				
@@ -276,7 +283,7 @@ namespace TOB
 				}
 			}
 			
-			static public int QUALITY = 25;
+			static public int QUALITY = 38;
 			
 			static public bool FULLSCREEN = true;
 			
@@ -339,6 +346,18 @@ namespace TOB
 					};
 					frm.Controls.Add (gb);
 					_gb = gb;
+					if(DevMode)
+					{
+						Button bt = new Button() {
+							Dock = DockStyle.Left,
+							Text = "SYNC",
+							Width = 100,
+						};
+						bt.Click += (s, e) => {
+							Streaming.SyncAudio(true);
+						};
+						gb.Controls.Add (bt);
+					}
 					{
 						Button bt = new Button() {
 							Dock = DockStyle.Left,
