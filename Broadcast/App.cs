@@ -34,7 +34,9 @@ namespace TOB
 			static VLC.MediaPlayback _AudioProc = null;
 			static string _IP = null;
 			static DateTime _LastSync;
-			static int SYNC_INTERVAL = 5;
+			static int SYNC_INTERVAL = 10;
+			static int SYNC_INTERVAL_ONCE = 5;
+			static bool _FirstReset = true;
 			
 			static public void Init (string[] args)
 			{
@@ -52,11 +54,11 @@ namespace TOB
 				_vlc.Dispose();
 			}
 			
-			static public bool Start(string ip, bool fullscreen)
+			static public bool Start(string ip)
 			{
 				lock (_Sync)
 				{
-					StartAudioAndVideoPlayback (ip, fullscreen);
+					StartAudioAndVideoPlayback (ip);
 					
 					if (!IsRemoteAlive())
 						return false;
@@ -66,6 +68,7 @@ namespace TOB
 					
 					Log.WriteLine("Streaming from {0} at {1}", ip, _LastSync);
 					
+					_FirstReset = true;
 					_Playing = true;
 					
 					_Thread = new Thread(new ThreadStart(()=>
@@ -164,11 +167,55 @@ namespace TOB
 					if (!_AudioProc.Alive || !_VideoProc.Alive)
 						return;
 					
-					var time = DateTime.Now.Subtract (_LastSync);
-					if (time.Minutes >= SYNC_INTERVAL || forceSync)
+					int interval = SYNC_INTERVAL;
+					if (_FirstReset)
 					{
-						_AudioProc.Stop();
-						_AudioProc.Play();
+						interval = SYNC_INTERVAL_ONCE;
+						_FirstReset = false;
+					}
+					
+					var time = DateTime.Now.Subtract (_LastSync);
+					if (time.Minutes >= interval || forceSync)
+					{
+						var newAudio = _vlc.CreatePlayback(
+							string.Format ("http://{0}:8080/audio.wav", _IP), 
+							new string[] {
+								//"--no-video",
+								FILE_CACHING_OPTION,
+								LIVE_CACHING_OPTION,
+								DISK_CACHING_OPTION,
+								NETWORK_CACHING_OPTION,
+							});
+						newAudio.Play();
+						
+						var newVideo = _vlc.CreatePlayback(
+							string.Format ("http://{0}:8080/video4flash", _IP), 
+							new string[] {
+								//"--no-audio",
+								FILE_CACHING_OPTION,
+								LIVE_CACHING_OPTION,
+								DISK_CACHING_OPTION,
+								NETWORK_CACHING_OPTION,
+							});
+						newVideo.Play();
+				
+						newAudio.SetVolume (100);
+						newVideo.Fullscreen = UI.FULLSCREEN;
+						
+						if (null != _AudioProc)
+						{
+							_AudioProc.Stop();
+							_AudioProc.Dispose();
+						}
+						
+						if (null != _VideoProc)
+						{
+							_VideoProc.Stop();
+							_VideoProc.Dispose();
+						}
+						
+						_AudioProc = newAudio;
+						_VideoProc = newVideo;
 						
 						_LastSync = DateTime.Now;
 						Log.WriteLine("SyncAudio at {0}", _LastSync);
@@ -239,9 +286,8 @@ namespace TOB
 				return false;
 			}
 			
-			static void StartAudioAndVideoPlayback(string ip, bool fullscreen)
+			static void StartAudioAndVideoPlayback(string ip)
 			{
-				Log.WriteLine (NETWORK_CACHING_OPTION);
 				_AudioProc = _vlc.CreatePlayback(
 					string.Format ("http://{0}:8080/audio.wav", ip), 
 					new string[] {
@@ -265,7 +311,7 @@ namespace TOB
 				_VideoProc.Play();
 				
 				_AudioProc.SetVolume (100);
-				_VideoProc.Fullscreen = fullscreen;
+				_VideoProc.Fullscreen = UI.FULLSCREEN;
 			}
 		}
 		
@@ -381,7 +427,7 @@ namespace TOB
 							
 							UI.SetStatus ("Connecting");
 					
-							if (!Streaming.Start(IP, FULLSCREEN))
+							if (!Streaming.Start(IP))
 							{
 								Warn(string.Format("Cannot connect to {0}!", IP));
 								UI.SetStatus ("");
