@@ -25,6 +25,7 @@ namespace TOB
 			const string LIVE_CACHING_OPTION = "--live-caching=" + CACHING;
 			const string DISK_CACHING_OPTION = "--disk-caching=" + CACHING;
 			const string NETWORK_CACHING_OPTION = "--network-caching=" + CACHING;
+			const string CAPTURE_SIZE_OPTION = "--dshow-size=640x480";
 			
 			static Object _Sync = new Object();
 			static bool _Playing = false;
@@ -37,6 +38,7 @@ namespace TOB
 			static int SYNC_INTERVAL = 10;
 			static int SYNC_INTERVAL_ONCE = 5;
 			static bool _FirstReset = true;
+			static Form _PlaybackForm = null;
 			
 			static public void Init (string[] args)
 			{
@@ -97,6 +99,32 @@ namespace TOB
 					}));
 					
 					_Thread.Start();
+				}
+				return true;
+			}
+			
+			static public bool StartCapture()
+			{
+				lock (_Sync)
+				{
+					_PlaybackForm = UI.ShowPlaybackForm (UI.FULLSCREEN);
+					
+					_VideoProc = _vlc.CreatePlayback(
+						"dshow://", 
+						new string[] {
+							":dshow-size=1280*720",
+							":live-caching=300",
+						});
+					_VideoProc.SetHWND (_PlaybackForm.Handle);
+					_VideoProc.Play();
+					
+					_VideoProc.SetVolume (100);
+					//_VideoProc.Fullscreen = UI.FULLSCREEN;
+					
+					_AudioProc = null;
+					_Thread = null;
+					
+					_Playing = true;
 				}
 				return true;
 			}
@@ -251,6 +279,13 @@ namespace TOB
 						_VideoProc.Dispose();
 						_VideoProc = null;
 					}
+					
+					if (null != _PlaybackForm)
+					{
+						_PlaybackForm.Close();
+						_PlaybackForm.Dispose();
+						_PlaybackForm = null;
+					}
 				}
 			}
 			
@@ -392,6 +427,18 @@ namespace TOB
 					};
 					frm.Controls.Add (gb);
 					_gb = gb;
+					{
+						Button bt = new Button() {
+							Dock = DockStyle.Left,
+							Text = "CAPTURE",
+							Width = 100,
+						};
+						bt.Click += (s, e) => {
+							Streaming.Stop();
+							Streaming.StartCapture();
+						};
+						gb.Controls.Add (bt);
+					}
 					if(DevMode)
 					{
 						Button bt = new Button() {
@@ -404,6 +451,7 @@ namespace TOB
 						};
 						gb.Controls.Add (bt);
 					}
+					
 					{
 						Button bt = new Button() {
 							Dock = DockStyle.Left,
@@ -608,6 +656,32 @@ namespace TOB
 			static public void Warn(string msg)
 			{
 				MessageBox.Show(msg);
+			}
+			
+			static public Form ShowPlaybackForm(bool fullscreen)
+			{
+				Form frm = new Form() {
+					FormBorderStyle = FormBorderStyle.None,
+					BackColor = Color.Black,
+				};
+				frm.FormClosing += (s, e) =>
+				{
+					e.Cancel = true;
+				};
+				
+				int w = 480;
+				int h = 320;
+				
+				if (fullscreen)
+				{
+					w = Screen.PrimaryScreen.Bounds.Width;
+					h = Screen.PrimaryScreen.Bounds.Height;
+				}
+				
+				frm.Show();
+				frm.Bounds = new Rectangle (0, 0, w, h);
+				
+				return frm;
 			}
 		}
 		

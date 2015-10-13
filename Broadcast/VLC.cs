@@ -81,6 +81,11 @@ namespace TOB
 				}
 			}
 			
+			public void SetHWND(IntPtr hwnd)
+			{
+				mVLC.libvlc_media_player_set_hwnd (mPlayer, hwnd);
+			}
+			
 			public void Play()
 			{
 				mVLC.libvlc_media_player_play (mPlayer);
@@ -135,6 +140,7 @@ namespace TOB
 			libvlc_media_player_new = DyLib.GetProc<libvlc_media_player_new_delegate>(module);
 			libvlc_media_player_new_from_media = DyLib.GetProc<libvlc_media_player_new_from_media_delegate>(module);
 			libvlc_media_player_release = DyLib.GetProc<libvlc_media_player_release_delegate>(module);
+			libvlc_media_player_set_hwnd = DyLib.GetProc<libvlc_media_player_set_hwnd_delegate>(module);
 			libvlc_media_player_play = DyLib.GetProc<libvlc_media_player_play_delegate>(module);
 			libvlc_media_player_stop = DyLib.GetProc<libvlc_media_player_stop_delegate>(module);
 			libvlc_media_player_set_pause = DyLib.GetProc<libvlc_media_player_set_pause_delegate>(module);
@@ -202,6 +208,10 @@ namespace TOB
 		[UnmanagedFunctionPointer(CallingConvention.Cdecl)]
         public delegate void libvlc_media_player_release_delegate(IntPtr mediaplayer);
         public libvlc_media_player_release_delegate libvlc_media_player_release;
+		
+		[UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+        public delegate IntPtr libvlc_media_player_set_hwnd_delegate(IntPtr mediaplayer, IntPtr hwnd);
+        public libvlc_media_player_set_hwnd_delegate libvlc_media_player_set_hwnd;
 		
 		[UnmanagedFunctionPointer(CallingConvention.Cdecl)]
         public delegate void libvlc_media_player_play_delegate(IntPtr mediaplayer);
