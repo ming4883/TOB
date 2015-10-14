@@ -20,7 +20,7 @@ namespace TOB
 		class Streaming
 		{
 			// https://wiki.videolan.org/VLC_command-line_help
-			const string CACHING = "2048";
+			const string CACHING = "8192";
 			const string FILE_CACHING_OPTION = "--file-caching=" + CACHING;
 			const string LIVE_CACHING_OPTION = "--live-caching=" + CACHING;
 			const string DISK_CACHING_OPTION = "--disk-caching=" + CACHING;
@@ -176,7 +176,7 @@ namespace TOB
 						_AudioProc.Play();
 						_VideoProc.Play();
 						_AudioProc.SetVolume (100);
-						_VideoProc.Fullscreen = fullscreen;
+						//_VideoProc.Fullscreen = fullscreen;
 						
 						_LastSync = DateTime.Now;
 					}
@@ -207,31 +207,6 @@ namespace TOB
 					var time = DateTime.Now.Subtract (_LastSync);
 					if (time.Minutes >= interval || forceSync)
 					{
-						var newAudio = _vlc.CreatePlayback(
-							string.Format ("http://{0}:8080/audio.wav", _IP), 
-							new string[] {
-								//"--no-video",
-								FILE_CACHING_OPTION,
-								LIVE_CACHING_OPTION,
-								DISK_CACHING_OPTION,
-								NETWORK_CACHING_OPTION,
-							});
-						newAudio.Play();
-						
-						var newVideo = _vlc.CreatePlayback(
-							string.Format ("http://{0}:8080/video4flash", _IP), 
-							new string[] {
-								//"--no-audio",
-								FILE_CACHING_OPTION,
-								LIVE_CACHING_OPTION,
-								DISK_CACHING_OPTION,
-								NETWORK_CACHING_OPTION,
-							});
-						newVideo.SetHWND (_PlaybackForm.Handle);
-						newVideo.Play();
-				
-						newAudio.SetVolume (100);
-						//newVideo.Fullscreen = UI.FULLSCREEN;
 						
 						if (null != _AudioProc)
 						{
@@ -244,6 +219,32 @@ namespace TOB
 							_VideoProc.Stop();
 							_VideoProc.Dispose();
 						}
+						
+						var newAudio = _vlc.CreatePlayback(
+							string.Format ("http://{0}:8080/audio.acc", _IP), 
+							new string[] {
+								//"--no-video",
+								FILE_CACHING_OPTION,
+								LIVE_CACHING_OPTION,
+								DISK_CACHING_OPTION,
+								NETWORK_CACHING_OPTION,
+							});
+						newAudio.Play();
+						
+						var newVideo = _vlc.CreatePlayback(
+							string.Format ("http://{0}:8080/video", _IP), 
+							new string[] {
+								//"--no-audio",
+								FILE_CACHING_OPTION,
+								LIVE_CACHING_OPTION,
+								DISK_CACHING_OPTION,
+								NETWORK_CACHING_OPTION,
+							});
+						newVideo.SetHWND (_PlaybackForm.Handle);
+						newVideo.Play();
+				
+						newAudio.SetVolume (100);
+						//newVideo.Fullscreen = UI.FULLSCREEN;
 						
 						_AudioProc = newAudio;
 						_VideoProc = newVideo;
@@ -327,7 +328,7 @@ namespace TOB
 			static void StartAudioAndVideoPlayback(string ip)
 			{
 				_AudioProc = _vlc.CreatePlayback(
-					string.Format ("http://{0}:8080/audio.wav", ip), 
+					string.Format ("http://{0}:8080/audio.acc", ip), 
 					new string[] {
 						//"--no-video",
 						FILE_CACHING_OPTION,
@@ -338,7 +339,7 @@ namespace TOB
 				_AudioProc.Play();
 				
 				_VideoProc = _vlc.CreatePlayback(
-					string.Format ("http://{0}:8080/video4flash", ip), 
+					string.Format ("http://{0}:8080/video", ip), 
 					new string[] {
 						//"--no-audio",
 						FILE_CACHING_OPTION,
