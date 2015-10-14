@@ -221,7 +221,7 @@ namespace TOB
 						}
 						
 						var newAudio = _vlc.CreatePlayback(
-							string.Format ("http://{0}:8080/audio.acc", _IP), 
+							string.Format ("http://{0}:8080/audio.aac", _IP), 
 							new string[] {
 								//"--no-video",
 								FILE_CACHING_OPTION,
@@ -328,7 +328,7 @@ namespace TOB
 			static void StartAudioAndVideoPlayback(string ip)
 			{
 				_AudioProc = _vlc.CreatePlayback(
-					string.Format ("http://{0}:8080/audio.acc", ip), 
+					string.Format ("http://{0}:8080/audio.aac", ip), 
 					new string[] {
 						//"--no-video",
 						FILE_CACHING_OPTION,
