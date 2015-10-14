@@ -60,6 +60,8 @@ namespace TOB
 			{
 				lock (_Sync)
 				{
+					_PlaybackForm = UI.ShowPlaybackForm (UI.FULLSCREEN);
+					
 					StartAudioAndVideoPlayback (ip);
 					
 					if (!IsRemoteAlive())
@@ -225,10 +227,11 @@ namespace TOB
 								DISK_CACHING_OPTION,
 								NETWORK_CACHING_OPTION,
 							});
+						newVideo.SetHWND (_PlaybackForm.Handle);
 						newVideo.Play();
 				
 						newAudio.SetVolume (100);
-						newVideo.Fullscreen = UI.FULLSCREEN;
+						//newVideo.Fullscreen = UI.FULLSCREEN;
 						
 						if (null != _AudioProc)
 						{
@@ -343,10 +346,11 @@ namespace TOB
 						DISK_CACHING_OPTION,
 						NETWORK_CACHING_OPTION,
 					});
+				_VideoProc.SetHWND (_PlaybackForm.Handle);
 				_VideoProc.Play();
 				
 				_AudioProc.SetVolume (100);
-				_VideoProc.Fullscreen = UI.FULLSCREEN;
+				//_VideoProc.Fullscreen = UI.FULLSCREEN;
 			}
 		}
 		
@@ -660,17 +664,28 @@ namespace TOB
 			
 			static public Form ShowPlaybackForm(bool fullscreen)
 			{
+				const int defaultW = 480;
+				const int defaultH = 320;
+				
 				Form frm = new Form() {
 					FormBorderStyle = FormBorderStyle.None,
 					BackColor = Color.Black,
+					KeyPreview = true,
 				};
 				frm.FormClosing += (s, e) =>
 				{
 					e.Cancel = true;
 				};
+				frm.KeyDown += (s, e) =>
+				{
+					if (e.KeyCode == Keys.F11)
+					{
+						frm.Bounds = new Rectangle (frm.Location.X, frm.Location.Y, defaultW, defaultH);
+					}
+				};
 				
-				int w = 480;
-				int h = 320;
+				int w = defaultW;
+				int h = defaultH;
 				
 				if (fullscreen)
 				{
@@ -679,7 +694,7 @@ namespace TOB
 				}
 				
 				frm.Show();
-				frm.Bounds = new Rectangle (0, 0, w, h);
+				frm.Bounds = new Rectangle ((Screen.PrimaryScreen.Bounds.Width - w) / 2, (Screen.PrimaryScreen.Bounds.Height - h) / 2, w, h);
 				
 				return frm;
 			}
