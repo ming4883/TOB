@@ -1,13 +1,15 @@
 ////css_co /unsafe;
 //css_import Package
 //css_import VLC
+//css_import UI
+//css_import Settings
+//css_import Log
 using System;
 using System.IO;
 using System.Text;
 using System.Threading;
 using System.Diagnostics;
-using System.Windows.Forms;
-using System.Drawing;
+
 using System.Net;
 using System.Xml;
 
@@ -15,8 +17,6 @@ namespace TOB
 {
 	class App
 	{
-		public static bool DevMode = false;
-		
 		class Streaming
 		{
 			// https://wiki.videolan.org/VLC_command-line_help
@@ -27,18 +27,22 @@ namespace TOB
 			const string NETWORK_CACHING_OPTION = "--network-caching=" + CACHING;
 			const string CAPTURE_SIZE_OPTION = "--dshow-size=640x480";
 			
+			const int SYNC_INTERVAL = 10;
+			const int SYNC_INTERVAL_ONCE = 5;
+			
 			static Object _Sync = new Object();
 			static bool _Playing = false;
-			static Thread _Thread = null;
+			
 			static VLC _vlc = null;
 			static VLC.MediaPlayback _VideoProc = null;
 			static VLC.MediaPlayback _AudioProc = null;
-			static string _IP = null;
+			
+			static Thread _SyncThread = null;
 			static DateTime _LastSync;
-			static int SYNC_INTERVAL = 10;
-			static int SYNC_INTERVAL_ONCE = 5;
+			
 			static bool _FirstReset = true;
-			static Form _PlaybackForm = null;
+			static UI.PlaybackForm _PlaybackForm = null;
+			
 			
 			static public void Init (string[] args)
 			{
@@ -56,18 +60,18 @@ namespace TOB
 				_vlc.Dispose();
 			}
 			
-			static public bool Start(string ip)
+			static public bool Start()
 			{
 				lock (_Sync)
 				{
-					_PlaybackForm = UI.ShowPlaybackForm (UI.FULLSCREEN);
+					_PlaybackForm = UI.ShowPlaybackForm (Settings.FULLSCREEN);
+					string ip = Settings.IP;
 					
 					StartAudioAndVideoPlayback (ip);
 					
 					if (!IsRemoteAlive())
 						return false;
 					
-					_IP = ip;
 					_LastSync = DateTime.Now;
 					
 					Log.WriteLine("Streaming from {0} at {1}", ip, _LastSync);
@@ -75,7 +79,7 @@ namespace TOB
 					_FirstReset = true;
 					_Playing = true;
 					
-					_Thread = new Thread(new ThreadStart(()=>
+					_SyncThread = new Thread(new ThreadStart(()=>
 					{
 						bool playing;
 						lock(_Sync)
@@ -87,7 +91,7 @@ namespace TOB
 						{
 							Thread.Sleep(5000);
 							
-							SetQuality(_IP, UI.QUALITY);
+							SetQuality(ip, Settings.QUALITY);
 							
 							RestartIfNeeded();
 							
@@ -100,7 +104,7 @@ namespace TOB
 						}
 					}));
 					
-					_Thread.Start();
+					_SyncThread.Start();
 				}
 				return true;
 			}
@@ -109,7 +113,7 @@ namespace TOB
 			{
 				lock (_Sync)
 				{
-					_PlaybackForm = UI.ShowPlaybackForm (UI.FULLSCREEN);
+					_PlaybackForm = UI.ShowPlaybackForm (Settings.FULLSCREEN);
 					
 					_VideoProc = _vlc.CreatePlayback(
 						"dshow://", 
@@ -117,14 +121,13 @@ namespace TOB
 							":dshow-size=1280*720",
 							":live-caching=300",
 						});
-					_VideoProc.SetHWND (_PlaybackForm.Handle);
+					_VideoProc.SetHWND (_PlaybackForm.HWND);
 					_VideoProc.Play();
 					
 					_VideoProc.SetVolume (100);
-					//_VideoProc.Fullscreen = UI.FULLSCREEN;
 					
 					_AudioProc = null;
-					_Thread = null;
+					_SyncThread = null;
 					
 					_Playing = true;
 				}
@@ -176,7 +179,6 @@ namespace TOB
 						_AudioProc.Play();
 						_VideoProc.Play();
 						_AudioProc.SetVolume (100);
-						//_VideoProc.Fullscreen = fullscreen;
 						
 						_LastSync = DateTime.Now;
 					}
@@ -206,8 +208,7 @@ namespace TOB
 					
 					var time = DateTime.Now.Subtract (_LastSync);
 					if (time.Minutes >= interval || forceSync)
-					{
-						
+					{	
 						if (null != _AudioProc)
 						{
 							_AudioProc.Stop();
@@ -220,34 +221,7 @@ namespace TOB
 							_VideoProc.Dispose();
 						}
 						
-						var newAudio = _vlc.CreatePlayback(
-							string.Format ("http://{0}:8080/audio.aac", _IP), 
-							new string[] {
-								//"--no-video",
-								FILE_CACHING_OPTION,
-								LIVE_CACHING_OPTION,
-								DISK_CACHING_OPTION,
-								NETWORK_CACHING_OPTION,
-							});
-						newAudio.Play();
-						
-						var newVideo = _vlc.CreatePlayback(
-							string.Format ("http://{0}:8080/video", _IP), 
-							new string[] {
-								//"--no-audio",
-								FILE_CACHING_OPTION,
-								LIVE_CACHING_OPTION,
-								DISK_CACHING_OPTION,
-								NETWORK_CACHING_OPTION,
-							});
-						newVideo.SetHWND (_PlaybackForm.Handle);
-						newVideo.Play();
-				
-						newAudio.SetVolume (100);
-						//newVideo.Fullscreen = UI.FULLSCREEN;
-						
-						_AudioProc = newAudio;
-						_VideoProc = newVideo;
+						StartAudioAndVideoPlayback (Settings.IP);
 						
 						_LastSync = DateTime.Now;
 						Log.WriteLine("SyncAudio at {0}", _LastSync);
@@ -264,10 +238,10 @@ namespace TOB
 				
 				lock (_Sync)
 				{
-					if (null != _Thread)
+					if (null != _SyncThread)
 					{
-						_Thread.Abort();
-						_Thread = null;
+						_SyncThread.Abort();
+						_SyncThread = null;
 						
 					}
 					if (null != _AudioProc)
@@ -328,7 +302,7 @@ namespace TOB
 			static void StartAudioAndVideoPlayback(string ip)
 			{
 				_AudioProc = _vlc.CreatePlayback(
-					string.Format ("http://{0}:8080/audio.aac", ip), 
+					string.Format ("http://{0}:8080/audio.wav", ip), 
 					new string[] {
 						//"--no-video",
 						FILE_CACHING_OPTION,
@@ -347,390 +321,10 @@ namespace TOB
 						DISK_CACHING_OPTION,
 						NETWORK_CACHING_OPTION,
 					});
-				_VideoProc.SetHWND (_PlaybackForm.Handle);
+				_VideoProc.SetHWND (_PlaybackForm.HWND);
 				_VideoProc.Play();
 				
 				_AudioProc.SetVolume (100);
-				//_VideoProc.Fullscreen = UI.FULLSCREEN;
-			}
-		}
-		
-		class UI
-		{
-			static public int IP1 = 192;
-			static public int IP2 = 168;
-			static public int IP3 = 1;
-			static public int IP4 = 112;
-			static public string IP
-			{
-				get
-				{
-					return string.Format ("{0}.{1}.{2}.{3}", IP1, IP2, IP3, IP4);
-				}
-			}
-			
-			static public int QUALITY = 38;
-			
-			static public bool FULLSCREEN = true;
-			
-			static GroupBox _gb;
-			static Form _frm;
-			
-			static public void SetStatus(string text)
-			{
-				var task = new MethodInvoker(()=>
-				{
-					if (string.IsNullOrWhiteSpace(text))
-						_gb.Text = "Broadcast";
-					else
-						_gb.Text = "Broadcast - " + text;
-				});
-				
-				if (_gb.InvokeRequired)
-					_gb.Invoke(task);
-				else
-					task();
-			}
-			
-			static public void Focus()
-			{
-				var task = new MethodInvoker(()=>
-				{
-					if (_frm.WindowState == FormWindowState.Minimized)
-						_frm.WindowState = FormWindowState.Normal;
-					
-					_frm.Activate();
-				});
-				
-				if (_frm.InvokeRequired)
-					_frm.Invoke(task);
-				else
-					task();
-			}
-			
-			static public void Init (string[] args)
-			{
-				FULLSCREEN = !DevMode;
-				
-				var frm = new Form() {
-					Text = "TobChurch Broadcast",
-					Size = new Size (480, 240),
-					Padding = new Padding (2),
-					Font = new Font ("Consolas", 12.0f),
-					FormBorderStyle = FormBorderStyle.FixedToolWindow,
-					MaximizeBox = false,
-				};
-				
-				frm.SuspendLayout();
-				
-				{
-					GroupBox gb = new GroupBox() {
-						Dock = DockStyle.Top,
-						Height = 80,
-						Text = "Broadcast",
-						Padding = new Padding (8),
-					};
-					frm.Controls.Add (gb);
-					_gb = gb;
-					{
-						Button bt = new Button() {
-							Dock = DockStyle.Left,
-							Text = "CAPTURE",
-							Width = 100,
-						};
-						bt.Click += (s, e) => {
-							Streaming.Stop();
-							Streaming.StartCapture();
-						};
-						gb.Controls.Add (bt);
-					}
-					if(DevMode)
-					{
-						Button bt = new Button() {
-							Dock = DockStyle.Left,
-							Text = "SYNC",
-							Width = 100,
-						};
-						bt.Click += (s, e) => {
-							Streaming.SyncAudio(true);
-						};
-						gb.Controls.Add (bt);
-					}
-					
-					{
-						Button bt = new Button() {
-							Dock = DockStyle.Left,
-							Text = "STOP",
-							Width = 100,
-						};
-						bt.Click += (s, e) => {
-							Streaming.Stop();
-							SetStatus("");
-						};
-						gb.Controls.Add (bt);
-					}
-					{
-						Button bt = new Button() {
-							Dock = DockStyle.Left,
-							Text = "START",
-							Width = 100,
-						};
-						bt.Click += (s, e) => {
-							Streaming.Stop();
-							
-							UI.SetStatus ("Connecting");
-					
-							if (!Streaming.Start(IP))
-							{
-								Warn(string.Format("Cannot connect to {0}!", IP));
-								UI.SetStatus ("");
-							}
-						};
-						gb.Controls.Add (bt);
-					}
-				}
-				
-				{
-					GroupBox gb = new GroupBox() {
-						Dock = DockStyle.Top,
-						Height = 130,
-						Text = "Options",
-					};
-					frm.Controls.Add (gb);
-					
-					#region QUALITY
-					{
-						Panel p = new Panel() {
-							Dock = DockStyle.Top,
-							Height = 35,
-						};
-						gb.Controls.Add (p);
-						{
-							NumericUpDown  ud = new NumericUpDown() {
-								Dock = DockStyle.Left,
-								Maximum = 100,
-								Minimum = 1,
-								Value = QUALITY,
-								Width = 60,
-							};
-							p.Controls.Add (ud);
-							ud.ValueChanged += (s, e) =>
-							{
-								QUALITY = (int)ud.Value;
-							};
-						}
-						{
-							Label la = new Label() {
-								Text = "Quality ",
-								Dock = DockStyle.Left,
-								TextAlign = ContentAlignment.MiddleLeft,
-								AutoSize = true,
-							};
-							p.Controls.Add (la);
-						}
-					}
-					#endregion
-					
-					#region IP
-					{
-						Panel p = new Panel() {
-							Dock = DockStyle.Top,
-							Height = 35,
-						};
-						gb.Controls.Add (p);
-						{
-							NumericUpDown  ud = new NumericUpDown() {
-								Dock = DockStyle.Left,
-								Maximum = 255,
-								Minimum = 0,
-								Value = IP4,
-								Width = 60,
-							};
-							p.Controls.Add (ud);
-							ud.ValueChanged += (s, e) =>
-							{
-								IP4 = (int)ud.Value;
-							};
-							
-						}
-						{
-							Label la = new Label() {
-								Text = ".",
-								Dock = DockStyle.Left,
-								TextAlign = ContentAlignment.MiddleLeft,
-								AutoSize = true,
-							};
-							p.Controls.Add (la);
-						}
-						{
-							NumericUpDown  ud = new NumericUpDown() {
-								Dock = DockStyle.Left,
-								Maximum = 255,
-								Minimum = 0,
-								Value = IP3,
-								Width = 60,
-							};
-							ud.ValueChanged += (s, e) =>
-							{
-								IP3 = (int)ud.Value;
-							};
-							p.Controls.Add (ud);
-						}
-						{
-							Label la = new Label() {
-								Text = ".",
-								Dock = DockStyle.Left,
-								TextAlign = ContentAlignment.MiddleLeft,
-								AutoSize = true,
-							};
-							p.Controls.Add (la);
-						}
-						{
-							NumericUpDown  ud = new NumericUpDown() {
-								Dock = DockStyle.Left,
-								Maximum = 255,
-								Minimum = 0,
-								Value = IP2,
-								Width = 60,
-							};
-							p.Controls.Add (ud);
-							ud.ValueChanged += (s, e) =>
-							{
-								IP2 = (int)ud.Value;
-							};
-						}
-						{
-							Label la = new Label() {
-								Text = ".",
-								Dock = DockStyle.Left,
-								TextAlign = ContentAlignment.MiddleLeft,
-								AutoSize = true,
-							};
-							p.Controls.Add (la);
-						}
-						{
-							NumericUpDown  ud = new NumericUpDown() {
-								Dock = DockStyle.Left,
-								Maximum = 255,
-								Minimum = 0,
-								Value = IP1,
-								Width = 60,
-							};
-							ud.ValueChanged += (s, e) =>
-							{
-								IP1 = (int)ud.Value;
-							};
-							p.Controls.Add (ud);
-						}
-						{
-							Label la = new Label() {
-								Text = "IP ",
-								Dock = DockStyle.Left,
-								TextAlign = ContentAlignment.MiddleLeft,
-								AutoSize = true,
-							};
-							p.Controls.Add (la);
-						}
-					}
-					#endregion
-					
-					{
-						CheckBox ck = new CheckBox() {
-							Dock = DockStyle.Top,
-							Text = "Fullscreen",
-							Checked = FULLSCREEN,
-							Height = 35,
-							//CheckAlign = ContentAlignment.MiddleRight,
-						};
-						gb.Controls.Add (ck);
-						ck.CheckedChanged += (s, e) =>
-						{
-							FULLSCREEN = ck.Checked;
-						};
-						
-					}
-					
-				}
-				
-				frm.ResumeLayout();
-				_frm = frm;
-				
-				Application.Run (frm);
-			}
-			
-			static public void Warn(string msg)
-			{
-				MessageBox.Show(msg);
-			}
-			
-			static public Form ShowPlaybackForm(bool fullscreen)
-			{
-				const int defaultW = 480;
-				const int defaultH = 320;
-				
-				Form frm = new Form() {
-					FormBorderStyle = FormBorderStyle.None,
-					BackColor = Color.Black,
-					KeyPreview = true,
-				};
-				frm.FormClosing += (s, e) =>
-				{
-					e.Cancel = true;
-				};
-				frm.KeyDown += (s, e) =>
-				{
-					if (e.KeyCode == Keys.F11)
-					{
-						frm.Bounds = new Rectangle (frm.Location.X, frm.Location.Y, defaultW, defaultH);
-					}
-				};
-				
-				int w = defaultW;
-				int h = defaultH;
-				
-				if (fullscreen)
-				{
-					w = Screen.PrimaryScreen.Bounds.Width;
-					h = Screen.PrimaryScreen.Bounds.Height;
-				}
-				
-				frm.Show();
-				frm.Bounds = new Rectangle ((Screen.PrimaryScreen.Bounds.Width - w) / 2, (Screen.PrimaryScreen.Bounds.Height - h) / 2, w, h);
-				
-				return frm;
-			}
-		}
-		
-		class Log
-		{
-			static public void WriteLine(object a)
-			{
-				if (DevMode)
-					Console.WriteLine(a);
-			}
-			
-			static public void WriteLine(string fmt, object a)
-			{
-				if (DevMode)
-					Console.WriteLine(fmt, a);
-			}
-			
-			static public void WriteLine(string fmt, object a, object b)
-			{
-				if (DevMode)
-					Console.WriteLine(fmt, a, b);
-			}
-			
-			static public void WriteLine(string fmt, object a, object b, object c)
-			{
-				if (DevMode)
-					Console.WriteLine(fmt, a, b, c);
-			}
-			
-			static public void WriteLine(string fmt, object a, object b, object c, object d)
-			{
-				if (DevMode)
-					Console.WriteLine(fmt, a, b, c, d);
 			}
 		}
 		
@@ -739,14 +333,45 @@ namespace TOB
 			foreach (string a in args)
 			{
 				if (a.ToLower() == "dev")
-					DevMode = true;
+					Settings.DevMode = true;
 			}
 			
-			Log.WriteLine ("DevMode = {0}", DevMode);
+			Log.WriteLine ("DevMode = {0}", Settings.DevMode);
 			
 			Streaming.Init (args);
 			
-			UI.Init (args);
+			UI.OnStreamingStart = () =>
+			{
+				Streaming.Stop();
+						
+				UI.SetStatus ("Connecting");
+		
+				if (!Streaming.Start())
+				{
+					UI.Warn(string.Format("Cannot connect to {0}!", Settings.IP));
+					UI.SetStatus ("");
+				}
+			};
+			
+			UI.OnStreamingSync = () =>
+			{
+				Streaming.SyncAudio(true);
+			};
+			
+			UI.OnStreamingStop = () =>
+			{
+				Streaming.Stop();
+				UI.SetStatus("");
+			};
+			
+			UI.OnCaptureStart = () =>
+			{
+				Streaming.Stop();
+				Streaming.StartCapture();
+				UI.SetStatus("Capturing");
+			};
+			
+			UI.Init();
 			
 			Streaming.Quit();
 		}
