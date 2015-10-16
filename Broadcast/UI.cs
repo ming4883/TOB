@@ -272,7 +272,7 @@ namespace TOB
 			Settings.FULLSCREEN = !Settings.DevMode;
 			
 			var frm = new Form() {
-				Text = "TobChurch Broadcast",
+				Text = "Tob Broadcast",
 				Size = new Size (480, 320),
 				Padding = new Padding (2),
 				Font = new Font ("Consolas", 10.0f),
@@ -344,6 +344,7 @@ namespace TOB
 				this.FormBorderStyle = FormBorderStyle.None;
 				this.BackColor = Color.Black;
 				this.KeyPreview = true;
+				this.ShowInTaskbar = false;
 				
 				this.SuspendLayout();
 				
@@ -361,7 +362,7 @@ namespace TOB
 					{
 						BackColor = Color.White,
 						ForeColor = Color.Black,
-						Font = new Font ("Consolas", 10.0f),
+						Font = new Font ("Consolas", 12.0f),
 						Text = "F11 - toggle Fullscreen; Esc - STOP", 
 						Dock = DockStyle.Top,
 					};

@@ -145,7 +145,7 @@ namespace TOB
             IntPtr fptr = Loader.Lookup(module, name);
             if (fptr == IntPtr.Zero)
             {
-                Debug.Print(string.Format("Proc {0} not found!", name));
+                Console.WriteLine(string.Format("Proc {0} not found!", name));
                 return null;
             }
             return Marshal.GetDelegateForFunctionPointer(fptr, typeof(T)) as T;

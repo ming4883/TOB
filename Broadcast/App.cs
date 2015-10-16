@@ -25,7 +25,6 @@ namespace TOB
 			const string LIVE_CACHING_OPTION = "--live-caching=" + CACHING;
 			const string DISK_CACHING_OPTION = "--disk-caching=" + CACHING;
 			const string NETWORK_CACHING_OPTION = "--network-caching=" + CACHING;
-			const string CAPTURE_SIZE_OPTION = "--dshow-size=640x480";
 			
 			const int SYNC_INTERVAL = 10;
 			const int SYNC_INTERVAL_ONCE = 5;

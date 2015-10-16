@@ -147,6 +147,13 @@ namespace TOB
 			libvlc_audio_set_volume = DyLib.GetProc<libvlc_audio_set_volume_delegate>(module);
 			libvlc_set_fullscreen = DyLib.GetProc<libvlc_set_fullscreen_delegate>(module);
 			libvlc_get_fullscreen = DyLib.GetProc<libvlc_get_fullscreen_delegate>(module);
+			
+			libvlc_media_discoverer_new = DyLib.GetProc<libvlc_media_discoverer_new_delegate>(module);
+			libvlc_media_discoverer_new_from_name = DyLib.GetProc<libvlc_media_discoverer_new_from_name_delegate>(module);
+			libvlc_media_discoverer_release = DyLib.GetProc<libvlc_media_discoverer_release_delegate>(module);
+			libvlc_media_discoverer_start = DyLib.GetProc<libvlc_media_discoverer_start_delegate>(module);
+			libvlc_media_discoverer_stop = DyLib.GetProc<libvlc_media_discoverer_stop_delegate>(module);
+			libvlc_media_discoverer_is_running = DyLib.GetProc<libvlc_media_discoverer_is_running_delegate>(module);
 		}
 
 		#region Core
@@ -236,6 +243,33 @@ namespace TOB
 		[UnmanagedFunctionPointer(CallingConvention.Cdecl)]
         public delegate int libvlc_get_fullscreen_delegate(IntPtr mediaplayer);
         public libvlc_get_fullscreen_delegate libvlc_get_fullscreen;
+		
+		#endregion
+		
+		#region MediaDiscovery
+		[UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+        public delegate IntPtr libvlc_media_discoverer_new_delegate(IntPtr instance, [MarshalAs(UnmanagedType.LPStr)]string name);
+        public libvlc_media_discoverer_new_delegate libvlc_media_discoverer_new;
+		
+		[UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+        public delegate IntPtr libvlc_media_discoverer_new_from_name_delegate(IntPtr instance, [MarshalAs(UnmanagedType.LPStr)]string name);
+        public libvlc_media_discoverer_new_from_name_delegate libvlc_media_discoverer_new_from_name;
+		
+		[UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+        public delegate void libvlc_media_discoverer_release_delegate(IntPtr discoverer);
+        public libvlc_media_discoverer_release_delegate libvlc_media_discoverer_release;
+		
+		[UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+        public delegate void libvlc_media_discoverer_start_delegate(IntPtr discoverer);
+        public libvlc_media_discoverer_start_delegate libvlc_media_discoverer_start;
+		
+		[UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+        public delegate void libvlc_media_discoverer_stop_delegate(IntPtr discoverer);
+        public libvlc_media_discoverer_stop_delegate libvlc_media_discoverer_stop;
+		
+		[UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+        public delegate int libvlc_media_discoverer_is_running_delegate(IntPtr discoverer);
+        public libvlc_media_discoverer_is_running_delegate libvlc_media_discoverer_is_running;
 		
 		#endregion
     
