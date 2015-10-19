@@ -20,7 +20,7 @@ namespace TOB
 		class Streaming
 		{
 			// https://wiki.videolan.org/VLC_command-line_help
-			const string CACHING = "8192";
+			const string CACHING = "1000";
 			const string FILE_CACHING_OPTION = "--file-caching=" + CACHING;
 			const string LIVE_CACHING_OPTION = "--live-caching=" + CACHING;
 			const string DISK_CACHING_OPTION = "--disk-caching=" + CACHING;
@@ -59,10 +59,48 @@ namespace TOB
 				_vlc.Dispose();
 			}
 			
+			static bool AdbPortForward(string adbPath, int port)
+			{
+				Process p = new Process();
+				
+				int ret = -1;
+				
+				try
+				{
+					//Console.WriteLine (sb);
+					p.StartInfo.UseShellExecute = false;
+					p.StartInfo.FileName = adbPath;
+					p.StartInfo.Arguments = string.Format("forward tcp:{0} tcp:{0}", port);
+					p.Start();
+					p.WaitForExit(-1);
+					
+					ret = p.ExitCode;
+				}
+				catch (Exception e)
+				{
+					Console.WriteLine (e);
+					return false;
+				}
+				
+				return ret == 0;
+			}
+			
 			static public bool Start()
 			{
+				if (!AdbPortForward("adb/adb.exe", 8080))
+				{
+					Log.WriteLine ("adb port forward failed");
+					return false;
+				}
+				else
+				{
+					Log.WriteLine ("adb port forward succeeded");
+				}
+				
+				// todo adb forward tcp:8080 tcp:8080
 				lock (_Sync)
 				{
+					
 					_PlaybackForm = UI.ShowPlaybackForm (Settings.FULLSCREEN);
 					string ip = Settings.IP;
 					
@@ -117,15 +155,22 @@ namespace TOB
 					_VideoProc = _vlc.CreatePlayback(
 						"dshow://", 
 						new string[] {
-							":dshow-size=1280*720",
+							//":dshow-size=1280*720",
+							":dshow-adev=none",
 							":live-caching=300",
 						});
 					_VideoProc.SetHWND (_PlaybackForm.HWND);
 					_VideoProc.Play();
 					
-					_VideoProc.SetVolume (100);
+					_AudioProc = _vlc.CreatePlayback(
+						"dshow://", 
+						new string[] {
+							":dshow-vdev=none",
+							":live-caching=300",
+						});
+					_AudioProc.SetVolume (100);
+					_AudioProc.Play();
 					
-					_AudioProc = null;
 					_SyncThread = null;
 					
 					_Playing = true;

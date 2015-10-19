@@ -282,9 +282,10 @@ namespace TOB
 			
 			frm.SuspendLayout();
 			
-			InitRemote (frm);
+			if (Settings.DevMode)
+				InitLocal (frm);
 			
-			InitLocal (frm);
+			InitRemote (frm);
 			
 			InitGeneral (frm);
 			

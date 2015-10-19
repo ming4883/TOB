@@ -6,10 +6,16 @@ namespace TOB
 	class Settings
 	{
 		static public bool DevMode = false;
+		static public int IP1 = 127;
+		static public int IP2 = 0;
+		static public int IP3 = 0;
+		static public int IP4 = 1;
+		/*
 		static public int IP1 = 192;
 		static public int IP2 = 168;
 		static public int IP3 = 1;
 		static public int IP4 = 112;
+		*/
 		static public string IP
 		{
 			get

@@ -148,12 +148,14 @@ namespace TOB
 			libvlc_set_fullscreen = DyLib.GetProc<libvlc_set_fullscreen_delegate>(module);
 			libvlc_get_fullscreen = DyLib.GetProc<libvlc_get_fullscreen_delegate>(module);
 			
+			/*
 			libvlc_media_discoverer_new = DyLib.GetProc<libvlc_media_discoverer_new_delegate>(module);
 			libvlc_media_discoverer_new_from_name = DyLib.GetProc<libvlc_media_discoverer_new_from_name_delegate>(module);
 			libvlc_media_discoverer_release = DyLib.GetProc<libvlc_media_discoverer_release_delegate>(module);
 			libvlc_media_discoverer_start = DyLib.GetProc<libvlc_media_discoverer_start_delegate>(module);
 			libvlc_media_discoverer_stop = DyLib.GetProc<libvlc_media_discoverer_stop_delegate>(module);
 			libvlc_media_discoverer_is_running = DyLib.GetProc<libvlc_media_discoverer_is_running_delegate>(module);
+			*/
 		}
 
 		#region Core
