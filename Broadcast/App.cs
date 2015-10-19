@@ -26,8 +26,10 @@ namespace TOB
 			const string DISK_CACHING_OPTION = "--disk-caching=" + CACHING;
 			const string NETWORK_CACHING_OPTION = "--network-caching=" + CACHING;
 			
-			const int SYNC_INTERVAL = 10;
+			const int SYNC_INTERVAL = 15;
 			const int SYNC_INTERVAL_ONCE = 5;
+			
+			const string ADB_PATH = "adb/adb.exe";
 			
 			static Object _Sync = new Object();
 			static bool _Playing = false;
@@ -59,15 +61,37 @@ namespace TOB
 				_vlc.Dispose();
 			}
 			
-			static bool AdbPortForward(string adbPath, int port)
+			static bool AdbKill(string adbPath)
 			{
-				Process p = new Process();
-				
 				int ret = -1;
 				
 				try
 				{
-					//Console.WriteLine (sb);
+					Process p = new Process();
+					p.StartInfo.UseShellExecute = false;
+					p.StartInfo.FileName = adbPath;
+					p.StartInfo.Arguments = "kill-server";
+					p.Start();
+					p.WaitForExit(-1);
+					
+					ret = p.ExitCode;
+				}
+				catch (Exception e)
+				{
+					Console.WriteLine (e);
+					return false;
+				}
+				
+				return ret == 0;
+			}
+			
+			static bool AdbPortForward(string adbPath, int port)
+			{
+				int ret = -1;
+				
+				try
+				{
+					Process p = new Process();
 					p.StartInfo.UseShellExecute = false;
 					p.StartInfo.FileName = adbPath;
 					p.StartInfo.Arguments = string.Format("forward tcp:{0} tcp:{0}", port);
@@ -87,14 +111,11 @@ namespace TOB
 			
 			static public bool Start()
 			{
-				if (!AdbPortForward("adb/adb.exe", 8080))
+				AdbKill(ADB_PATH);
+				if (!AdbPortForward(ADB_PATH, 8080))
 				{
 					Log.WriteLine ("adb port forward failed");
 					return false;
-				}
-				else
-				{
-					Log.WriteLine ("adb port forward succeeded");
 				}
 				
 				// todo adb forward tcp:8080 tcp:8080
@@ -203,11 +224,18 @@ namespace TOB
 				{
 					UI.Focus();
 					
+					AdbKill(ADB_PATH);
+					
 					// wait for 10 sec and then auto restart
 					for(int i = 10; i > 0; --i)
 					{
 						UI.SetStatus (string.Format("Interrupted, reconnect in {0}", i));
 						Thread.Sleep (1000);
+					}
+					
+					if (!AdbPortForward(ADB_PATH, 8080))
+					{
+						Log.WriteLine ("adb port forward failed");
 					}
 					
 					UI.SetStatus ("Connecting");

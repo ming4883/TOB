@@ -24,7 +24,7 @@ namespace TOB
 			}
 		}
 		
-		static public int QUALITY = 38;
+		static public int QUALITY = 67;
 		
 		static public bool FULLSCREEN = true;
 		
