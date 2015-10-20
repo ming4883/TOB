@@ -5,18 +5,18 @@ namespace TOB
 	
 	class Settings
 	{
-		static public bool DevMode = false;
-		static public int IP1 = 127;
-		static public int IP2 = 0;
-		static public int IP3 = 0;
-		static public int IP4 = 1;
+		public static bool DevMode = false;
+		public static int IP1 = 127;
+		public static int IP2 = 0;
+		public static int IP3 = 0;
+		public static int IP4 = 1;
 		/*
-		static public int IP1 = 192;
-		static public int IP2 = 168;
-		static public int IP3 = 1;
-		static public int IP4 = 112;
+		public static int IP1 = 192;
+		public static int IP2 = 168;
+		public static int IP3 = 1;
+		public static int IP4 = 112;
 		*/
-		static public string IP
+		public static string IP
 		{
 			get
 			{
@@ -24,10 +24,16 @@ namespace TOB
 			}
 		}
 		
-		static public int QUALITY = 67;
+		public static int QUALITY = 67;
 		
-		static public bool FULLSCREEN = true;
+		public static bool FULLSCREEN = true;
 		
+		public const int AUDIO_SOURCE_NETWORK = 0;
+		public const int AUDIO_SOURCE_MIC_IN = 1;
+		public static int AUDIO_SOURCE = AUDIO_SOURCE_MIC_IN;
+		
+		public const string REMOTE_CACHING = "500";
+		public const string CAPTURE_CACHING = "1000";
 	}
 	
 

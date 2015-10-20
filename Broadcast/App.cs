@@ -20,11 +20,11 @@ namespace TOB
 		class Streaming
 		{
 			// https://wiki.videolan.org/VLC_command-line_help
-			const string CACHING = "1000";
-			const string FILE_CACHING_OPTION = "--file-caching=" + CACHING;
-			const string LIVE_CACHING_OPTION = "--live-caching=" + CACHING;
-			const string DISK_CACHING_OPTION = "--disk-caching=" + CACHING;
-			const string NETWORK_CACHING_OPTION = "--network-caching=" + CACHING;
+			
+			const string FILE_CACHING_OPTION = "--file-caching=" + Settings.REMOTE_CACHING;
+			const string LIVE_CACHING_OPTION = "--live-caching=" + Settings.REMOTE_CACHING;
+			const string DISK_CACHING_OPTION = "--disk-caching=" + Settings.REMOTE_CACHING;
+			const string NETWORK_CACHING_OPTION = "--network-caching=" + Settings.REMOTE_CACHING;
 			
 			const int SYNC_INTERVAL = 15;
 			const int SYNC_INTERVAL_ONCE = 5;
@@ -121,7 +121,6 @@ namespace TOB
 				// todo adb forward tcp:8080 tcp:8080
 				lock (_Sync)
 				{
-					
 					_PlaybackForm = UI.ShowPlaybackForm (Settings.FULLSCREEN);
 					string ip = Settings.IP;
 					
@@ -129,6 +128,8 @@ namespace TOB
 					
 					if (!IsRemoteAlive())
 						return false;
+					
+					SetFocus(ip);
 					
 					_LastSync = DateTime.Now;
 					
@@ -140,10 +141,7 @@ namespace TOB
 					_SyncThread = new Thread(new ThreadStart(()=>
 					{
 						bool playing;
-						lock(_Sync)
-						{
-							playing = _Playing;
-						}
+						lock(_Sync) { playing = _Playing; }
 						
 						while (playing)
 						{
@@ -155,46 +153,11 @@ namespace TOB
 							
 							SyncAudio(false);
 							
-							lock(_Sync)
-							{
-								playing = _Playing;
-							}
+							lock(_Sync) { playing = _Playing; }
 						}
 					}));
 					
 					_SyncThread.Start();
-				}
-				return true;
-			}
-			
-			static public bool StartCapture()
-			{
-				lock (_Sync)
-				{
-					_PlaybackForm = UI.ShowPlaybackForm (Settings.FULLSCREEN);
-					
-					_VideoProc = _vlc.CreatePlayback(
-						"dshow://", 
-						new string[] {
-							//":dshow-size=1280*720",
-							":dshow-adev=none",
-							":live-caching=300",
-						});
-					_VideoProc.SetHWND (_PlaybackForm.HWND);
-					_VideoProc.Play();
-					
-					_AudioProc = _vlc.CreatePlayback(
-						"dshow://", 
-						new string[] {
-							":dshow-vdev=none",
-							":live-caching=300",
-						});
-					_AudioProc.SetVolume (100);
-					_AudioProc.Play();
-					
-					_SyncThread = null;
-					
-					_Playing = true;
 				}
 				return true;
 			}
@@ -250,7 +213,6 @@ namespace TOB
 						
 						_AudioProc.Play();
 						_VideoProc.Play();
-						_AudioProc.SetVolume (100);
 						
 						_LastSync = DateTime.Now;
 					}
@@ -371,18 +333,64 @@ namespace TOB
 				return false;
 			}
 			
+			static bool SetFocus(string ip)
+			{
+				const int MAX_RETRY = 5;
+				
+				for (int i=0; i <MAX_RETRY; ++i)
+				{
+					try
+					{
+						string url = string.Format ("http://{0}:8080/focus", ip);
+						var request = WebRequest.Create(url) as HttpWebRequest;
+						request.Timeout = 5000;
+						
+						var response = request.GetResponse() as HttpWebResponse;
+						XmlDocument xmlDoc = new XmlDocument();
+						xmlDoc.Load(response.GetResponseStream());
+						response.Close();
+						
+						string ret = xmlDoc.GetElementsByTagName("result")[0].InnerText.ToLower();
+						if (ret == "ok")
+							return true;
+					}
+					catch(Exception err)
+					{
+						Thread.Sleep (500);
+					}
+				}
+				
+				Log.WriteLine("SetFocus failed all {0} passes", MAX_RETRY);
+				
+				return false;
+			}
+			
 			static void StartAudioAndVideoPlayback(string ip)
 			{
-				_AudioProc = _vlc.CreatePlayback(
-					string.Format ("http://{0}:8080/audio.wav", ip), 
-					new string[] {
-						//"--no-video",
-						FILE_CACHING_OPTION,
-						LIVE_CACHING_OPTION,
-						DISK_CACHING_OPTION,
-						NETWORK_CACHING_OPTION,
-					});
-				_AudioProc.Play();
+				if (Settings.AUDIO_SOURCE == Settings.AUDIO_SOURCE_NETWORK)
+				{
+					_AudioProc = _vlc.CreatePlayback(
+						string.Format ("http://{0}:8080/audio.wav", ip), 
+						new string[] {
+							//"--no-video",
+							FILE_CACHING_OPTION,
+							LIVE_CACHING_OPTION,
+							DISK_CACHING_OPTION,
+							NETWORK_CACHING_OPTION,
+						});
+					Log.WriteLine("Audio from network");
+				}
+				else if (Settings.AUDIO_SOURCE == Settings.AUDIO_SOURCE_MIC_IN)
+				{
+					_AudioProc = _vlc.CreatePlayback(
+						"dshow://", 
+						new string[] {
+							":dshow-vdev=none",
+							":live-caching=" + Settings.CAPTURE_CACHING,
+						});
+					//_AudioProc.SetAudioDelay (-1000);
+					Log.WriteLine("Audio from mic-in");
+				}
 				
 				_VideoProc = _vlc.CreatePlayback(
 					string.Format ("http://{0}:8080/video", ip), 
@@ -393,10 +401,15 @@ namespace TOB
 						DISK_CACHING_OPTION,
 						NETWORK_CACHING_OPTION,
 					});
+					
 				_VideoProc.SetHWND (_PlaybackForm.HWND);
 				_VideoProc.Play();
 				
-				_AudioProc.SetVolume (100);
+				if (null != _AudioProc)
+				{
+					_AudioProc.SetVolume (100);
+					_AudioProc.Play();
+				}
 			}
 		}
 		
@@ -434,13 +447,6 @@ namespace TOB
 			{
 				Streaming.Stop();
 				UI.SetStatus("");
-			};
-			
-			UI.OnCaptureStart = () =>
-			{
-				Streaming.Stop();
-				Streaming.StartCapture();
-				UI.SetStatus("Capturing");
 			};
 			
 			UI.Init();

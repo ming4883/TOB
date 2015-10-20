@@ -93,7 +93,7 @@ namespace TOB
 				{
 					Button bt = new Button() {
 						Dock = DockStyle.Left,
-						Text = "STREAM",
+						Text = "PLAY",
 						Width = 100,
 					};
 					bt.Click += (s, e) => {
@@ -103,13 +103,37 @@ namespace TOB
 				}
 			}
 			
-			#region QUALITY
+			#region QUALITY & AUDIO_SOURCE
 			{
 				Panel p = new Panel() {
 					Dock = DockStyle.Top,
 					Height = 35,
 				};
 				gb.Controls.Add (p);
+				{
+					ComboBox cb = new ComboBox() {
+						Dock = DockStyle.Left,
+						DropDownStyle = ComboBoxStyle.DropDownList,
+						Width = 90,
+					};
+					p.Controls.Add (cb);
+					cb.Items.Add("Network");
+					cb.Items.Add("MIC-in");
+					cb.SelectedIndex = Settings.AUDIO_SOURCE;
+					cb.SelectionChangeCommitted += (s, e) =>
+					{
+						Settings.AUDIO_SOURCE = cb.SelectedIndex;
+					};
+				}
+				{
+					Label la = new Label() {
+						Text = "Audio ",
+						Dock = DockStyle.Left,
+						TextAlign = ContentAlignment.MiddleLeft,
+						AutoSize = true,
+					};
+					p.Controls.Add (la);
+				}
 				{
 					NumericUpDown  ud = new NumericUpDown() {
 						Dock = DockStyle.Left,
@@ -345,7 +369,7 @@ namespace TOB
 				this.FormBorderStyle = FormBorderStyle.None;
 				this.BackColor = Color.Black;
 				this.KeyPreview = true;
-				this.ShowInTaskbar = false;
+				//this.ShowInTaskbar = false;
 				
 				this.SuspendLayout();
 				

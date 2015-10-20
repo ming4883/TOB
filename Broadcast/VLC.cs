@@ -106,6 +106,11 @@ namespace TOB
 				mVLC.libvlc_audio_set_volume (mPlayer, volume);
 			}
 			
+			public void SetAudioDelay(Int64 delay)
+			{
+				mVLC.libvlc_audio_set_delay (mPlayer, delay);
+			}
+			
 			public bool Fullscreen
 			{
 				set
@@ -145,6 +150,7 @@ namespace TOB
 			libvlc_media_player_stop = DyLib.GetProc<libvlc_media_player_stop_delegate>(module);
 			libvlc_media_player_set_pause = DyLib.GetProc<libvlc_media_player_set_pause_delegate>(module);
 			libvlc_audio_set_volume = DyLib.GetProc<libvlc_audio_set_volume_delegate>(module);
+			libvlc_audio_set_delay = DyLib.GetProc<libvlc_audio_set_delay_delegate>(module);
 			libvlc_set_fullscreen = DyLib.GetProc<libvlc_set_fullscreen_delegate>(module);
 			libvlc_get_fullscreen = DyLib.GetProc<libvlc_get_fullscreen_delegate>(module);
 			
@@ -237,6 +243,10 @@ namespace TOB
 		[UnmanagedFunctionPointer(CallingConvention.Cdecl)]
         public delegate void libvlc_audio_set_volume_delegate(IntPtr mediaplayer, int volume);
         public libvlc_audio_set_volume_delegate libvlc_audio_set_volume;
+		
+		[UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+        public delegate void libvlc_audio_set_delay_delegate(IntPtr mediaplayer, Int64 delay);
+        public libvlc_audio_set_delay_delegate libvlc_audio_set_delay;
 		
 		[UnmanagedFunctionPointer(CallingConvention.Cdecl)]
         public delegate void libvlc_set_fullscreen_delegate(IntPtr mediaplayer, int fullscreen);
