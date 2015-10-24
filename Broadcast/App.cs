@@ -27,7 +27,7 @@ namespace TOB
 			const string NETWORK_CACHING_OPTION = "--network-caching=" + Settings.REMOTE_CACHING;
 			
 			const int SYNC_INTERVAL = 15;
-			const int SYNC_INTERVAL_ONCE = 5;
+			const int SYNC_INTERVAL_ONCE = 3;
 			
 			const string ADB_PATH = "adb/adb.exe";
 			
@@ -131,10 +131,6 @@ namespace TOB
 					
 					SetFocus(ip);
 					
-					_LastSync = DateTime.Now;
-					
-					Log.WriteLine("Streaming from {0} at {1}", ip, _LastSync);
-					
 					_FirstReset = true;
 					_Playing = true;
 					
@@ -156,6 +152,12 @@ namespace TOB
 							lock(_Sync) { playing = _Playing; }
 						}
 					}));
+					
+					
+					_LastSync = DateTime.Now;
+					
+					Log.WriteLine("Streaming from {0} at {1}", ip, _LastSync);
+					
 					
 					_SyncThread.Start();
 				}
@@ -231,13 +233,15 @@ namespace TOB
 				lock(_Sync)
 				{
 					if (!_AudioProc.Alive || !_VideoProc.Alive)
+					{
+						//Log.WriteLine("SyncAudio video / audio not alive");
 						return;
+					}
 					
 					int interval = SYNC_INTERVAL;
 					if (_FirstReset)
 					{
 						interval = SYNC_INTERVAL_ONCE;
-						_FirstReset = false;
 					}
 					
 					var time = DateTime.Now.Subtract (_LastSync);
@@ -258,7 +262,12 @@ namespace TOB
 						StartAudioAndVideoPlayback (Settings.IP);
 						
 						_LastSync = DateTime.Now;
+						_FirstReset = false;
 						Log.WriteLine("SyncAudio at {0}", _LastSync);
+					}
+					else
+					{
+						//Log.WriteLine("SyncAudio not yet {0} / {1}", time, interval);
 					}
 				}
 			}
