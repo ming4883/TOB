@@ -40,6 +40,7 @@ namespace TOB
 			
 			static Thread _SyncThread = null;
 			static DateTime _LastSync;
+			static string _LastIP = "127.0.0.1";
 			
 			static bool _FirstReset = true;
 			static UI.PlaybackForm _PlaybackForm = null;
@@ -111,25 +112,29 @@ namespace TOB
 			
 			static public bool Start()
 			{
+				_LastIP = "127.0.0.1";
+					
 				AdbKill(ADB_PATH);
+				
 				if (!AdbPortForward(ADB_PATH, 8080))
 				{
-					Log.WriteLine ("adb port forward failed");
-					return false;
+					_LastIP = Settings.IP;
+					Log.WriteLine ("adb port forward failed, use remote ip: " + _LastIP);
 				}
 				
-				// todo adb forward tcp:8080 tcp:8080
 				lock (_Sync)
 				{
 					_PlaybackForm = UI.ShowPlaybackForm (Settings.FULLSCREEN);
-					string ip = Settings.IP;
 					
-					StartAudioAndVideoPlayback (ip);
+					StartAudioAndVideoPlayback (_LastIP);
 					
 					if (!IsRemoteAlive())
+					{
+						Stop();
 						return false;
-					
-					SetFocus(ip);
+					}
+						
+					SetFocus(_LastIP);
 					
 					_FirstReset = true;
 					_Playing = true;
@@ -143,7 +148,7 @@ namespace TOB
 						{
 							Thread.Sleep(5000);
 							
-							SetQuality(ip, Settings.QUALITY);
+							SetQuality(_LastIP, Settings.QUALITY);
 							
 							RestartIfNeeded();
 							
@@ -156,7 +161,7 @@ namespace TOB
 					
 					_LastSync = DateTime.Now;
 					
-					Log.WriteLine("Streaming from {0} at {1}", ip, _LastSync);
+					Log.WriteLine("Streaming from {0} at {1}", _LastIP, _LastSync);
 					
 					
 					_SyncThread.Start();
@@ -259,7 +264,7 @@ namespace TOB
 							_VideoProc.Dispose();
 						}
 						
-						StartAudioAndVideoPlayback (Settings.IP);
+						StartAudioAndVideoPlayback (_LastIP);
 						
 						_LastSync = DateTime.Now;
 						_FirstReset = false;
